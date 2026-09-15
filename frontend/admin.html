@@ -13,7 +13,11 @@
 <body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen">
 <header class="sticky top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_12px_rgba(11,28,48,0.03)]">
   <div class="h-16 px-margin flex items-center justify-between">
-    <span class="font-headline-sm text-headline-sm tracking-tight text-on-surface">OmniSure Admin</span>
+    <div class="flex items-center gap-space-md">
+      <span class="font-headline-sm text-headline-sm tracking-tight text-on-surface">OmniSure Admin</span>
+      <span class="font-label-sm text-label-sm text-secondary font-semibold">Overview</span>
+      <a href="/datasets.html" class="font-label-sm text-label-sm text-on-surface-variant">Datasets</a>
+    </div>
     <button id="logout-btn" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Sign out</button>
   </div>
 </header>

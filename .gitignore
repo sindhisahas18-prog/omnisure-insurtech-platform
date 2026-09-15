@@ -8,3 +8,4 @@ venv/
 node_modules/
 *.egg-info/
 alembic/versions/__pycache__/
+data/uploads/

@@ -6,7 +6,7 @@ Business, Life, and Livestock insurance — built around a reusable insurance
 engine, a structured PostgreSQL database, and (from Phase 2) a RAG knowledge
 base over uploaded policy datasets.
 
-## Status: Phase 1 — Foundation ✅
+## Status: Phase 1 ✅ Foundation · Phase 2 🚧 In progress (dataset ingestion done)
 
 This is the first of 7 planned phases. What's live right now:
 
@@ -20,11 +20,35 @@ This is the first of 7 planned phases. What's live right now:
 - Frontend built from the Stitch "Sovereign Intelligence" design tokens
   (colors, type scale, spacing) as plain HTML + Tailwind + vanilla JS
 
-**Not yet implemented** (later phases, see below) — nothing here is faked or
-stubbed to look finished: the claims system, RAG/AI advisor, OCR, fraud/risk
-engine, voice assistant, and analytics charts simply don't have routes yet.
-The dashboard's "Open Claims" metric returns real `0` because there's no
-claims table yet, not a placeholder number.
+### Phase 2 so far: flexible dataset ingestion layer
+
+- `Dataset` / `DatasetRecord` models — one row per uploaded file, one row per
+  cleaned record (stored under its *original* column names in JSONB, so
+  wildly different insurance-type datasets share one table without forcing
+  a fixed schema)
+- `app/services/field_mapping.py` — the alias-mapping layer the spec asked
+  for (`company` / `insurer` / `insurance_company` → `insurer_name`, etc.),
+  normalized so `Annual_Premium`, `annual premium`, and `AnnualPremium` all
+  match the same alias
+- `app/services/data_quality.py` — missing values by column, duplicate rows,
+  invalid-numeric detection; reported to the admin, never silently dropped
+- `app/services/ingestion.py` — validate → clean → normalize → import,
+  status-tracked per dataset (`uploaded → validating → processing →
+  processed`, or `error` with the actual exception message)
+- Admin API: upload (with instant preview before anything is imported),
+  process/reprocess, list, per-dataset record browsing, delete
+  (`/admin.html` → **Datasets**)
+- **Verified against your real uploaded data**, not synthetic rows: the
+  vehicle cross-sell dataset (381,109 rows) and the UK home insurance
+  dataset (256,136 rows, 66 columns) both ran through the full
+  map → validate → clean → import pipeline end-to-end during development
+
+**Not yet implemented**: policy PDF/document processing, embeddings/FAISS,
+the AI advisor and recommendation/comparison engine (rest of Phase 2), the
+claims system, OCR, fraud/risk engine, voice assistant, and analytics
+charts. Nothing here is faked or stubbed to look finished — the dashboard's
+"Open Claims" metric returns real `0` because there's no claims table yet,
+not a placeholder number.
 
 ## Project layout
 

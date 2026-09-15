@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OmniSure — Datasets</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/static/js/tailwind-config.js"></script>
+</head>
+<body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen">
+<header class="sticky top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_12px_rgba(11,28,48,0.03)]">
+  <div class="h-16 px-margin flex items-center justify-between">
+    <div class="flex items-center gap-space-md">
+      <span class="font-headline-sm text-headline-sm tracking-tight text-on-surface">OmniSure Admin</span>
+      <a href="/admin.html" class="font-label-sm text-label-sm text-on-surface-variant">Overview</a>
+      <span class="font-label-sm text-label-sm text-secondary font-semibold">Datasets</span>
+    </div>
+    <button id="logout-btn" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Sign out</button>
+  </div>
+</header>
+
+<main class="flex-1 w-full px-margin py-space-md max-w-3xl mx-auto flex flex-col gap-space-lg">
+  <h1 class="font-headline-xl-mobile text-headline-xl-mobile">Knowledge base / dataset management</h1>
+
+  <section class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+    <h2 class="font-headline-sm text-headline-sm">Upload a dataset</h2>
+    <form id="upload-form" class="flex flex-col gap-space-sm">
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Insurance type</span>
+        <select id="insurance_type_code" required class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"></select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Dataset name</span>
+        <input id="name" type="text" required placeholder="e.g. Car Cross-Sell 2026" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"/>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">File (.csv, .xlsx, .json)</span>
+        <input id="file" type="file" required accept=".csv,.xlsx,.xls,.json" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"/>
+      </label>
+      <p id="upload-error" class="text-error font-body-sm text-body-sm hidden"></p>
+      <button type="submit" class="w-full py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold">Upload &amp; preview</button>
+    </form>
+  </section>
+
+  <section id="preview-section" class="hidden p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+    <h2 class="font-headline-sm text-headline-sm">Preview</h2>
+    <div id="preview-content" class="font-body-sm text-body-sm flex flex-col gap-space-sm"></div>
+    <button id="process-btn" class="w-full py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold">Validate, clean &amp; import</button>
+  </section>
+
+  <section class="flex flex-col gap-space-sm">
+    <h2 class="font-headline-sm text-headline-sm">Datasets</h2>
+    <div id="datasets-list" class="flex flex-col gap-space-sm"></div>
+  </section>
+</main>
+
+<script src="/static/js/api.js"></script>
+<script>
+  requireAuth();
+  const user = getUser();
+  if (!user || user.role !== "admin") window.location.href = "/dashboard.html";
+
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    clearSession();
+    window.location.href = "/login.html";
+  });
+
+  let pendingDatasetId = null;
+
+  async function loadInsuranceTypeOptions() {
+    const types = await apiFetch("/catalog/insurance-types");
+    const select = document.getElementById("insurance_type_code");
+    select.innerHTML = types.map((t) => `<option value="${t.code}">${t.name}</option>`).join("");
+  }
+
+  function statusBadge(status) {
+    const colors = {
+      processed: "bg-secondary/10 text-secondary",
+      error: "bg-error-container text-on-error-container",
+    };
+    const cls = colors[status] || "bg-surface-container-high text-on-surface-variant";
+    return `<span class="px-2 py-0.5 rounded-full ${cls} font-label-sm text-label-sm">${status}</span>`;
+  }
+
+  async function loadDatasets() {
+    const datasets = await apiFetch("/admin/datasets");
+    const list = document.getElementById("datasets-list");
+    if (datasets.length === 0) {
+      list.innerHTML = `<p class="font-body-sm text-body-sm text-on-surface-variant">No datasets uploaded yet.</p>`;
+      return;
+    }
+    list.innerHTML = datasets
+      .map(
+        (d) => `
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-headline-sm text-headline-sm">${d.name}</span>
+            ${statusBadge(d.status)}
+          </div>
+          <span class="font-body-sm text-body-sm text-on-surface-variant">${d.original_filename} · v${d.version} · ${d.record_count} records</span>
+          ${d.error_message ? `<p class="text-error font-body-sm text-body-sm mt-1">${d.error_message}</p>` : ""}
+        </div>
+        <div class="flex gap-2">
+          <button data-id="${d.id}" class="reprocess-btn px-3 py-1.5 rounded-xl bg-surface-container-high font-label-sm text-label-sm">Reprocess</button>
+          <button data-id="${d.id}" class="delete-btn px-3 py-1.5 rounded-xl bg-error-container text-on-error-container font-label-sm text-label-sm">Delete</button>
+        </div>
+      </div>`
+      )
+      .join("");
+
+    list.querySelectorAll(".reprocess-btn").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        await apiFetch(`/admin/datasets/${btn.dataset.id}/process`, { method: "POST" });
+        loadDatasets();
+      })
+    );
+    list.querySelectorAll(".delete-btn").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        if (!confirm("Delete this dataset and all its imported records?")) return;
+        await fetch(`/api/v1${"/admin/datasets/" + btn.dataset.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
+        loadDatasets();
+      })
+    );
+  }
+
+  document.getElementById("upload-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById("upload-error");
+    errorEl.classList.add("hidden");
+
+    const formData = new FormData();
+    formData.append("insurance_type_code", document.getElementById("insurance_type_code").value);
+    formData.append("name", document.getElementById("name").value);
+    formData.append("file", document.getElementById("file").files[0]);
+
+    try {
+      const res = await fetch("/api/v1/admin/datasets/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: formData,
+      });
+      const preview = await res.json();
+      if (!res.ok) throw new Error(preview.detail || "Upload failed");
+
+      // The list endpoint doesn't return an id from /upload directly (it's a preview),
+      // so re-fetch the dataset list and use the newest one for the Process button.
+      const datasets = await apiFetch("/admin/datasets");
+      pendingDatasetId = datasets[0].id;
+
+      const q = preview.quality_report;
+      document.getElementById("preview-content").innerHTML = `
+        <p><strong>${q.total_rows}</strong> rows · <strong>${q.total_columns}</strong> columns · <strong>${q.duplicate_rows}</strong> duplicate rows</p>
+        <p class="text-on-surface-variant">Detected fields: ${Object.entries(preview.column_mapping)
+          .filter(([, v]) => v)
+          .map(([k, v]) => `${k} → ${v}`)
+          .join(", ") || "none matched — columns will still import under their original names"}</p>
+      `;
+      document.getElementById("preview-section").classList.remove("hidden");
+      loadDatasets();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove("hidden");
+    }
+  });
+
+  document.getElementById("process-btn").addEventListener("click", async () => {
+    if (!pendingDatasetId) return;
+    await apiFetch(`/admin/datasets/${pendingDatasetId}/process`, { method: "POST" });
+    document.getElementById("preview-section").classList.add("hidden");
+    loadDatasets();
+  });
+
+  Promise.all([loadInsuranceTypeOptions(), loadDatasets()]).catch(console.error);
+</script>
+</body>
+</html>
