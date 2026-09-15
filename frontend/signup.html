@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OmniSure — Create account</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/static/js/tailwind-config.js"></script>
+</head>
+<body class="bg-surface text-on-surface font-body-md text-body-md min-h-screen flex flex-col items-center justify-center px-margin">
+  <div class="w-full max-w-sm flex flex-col gap-space-lg">
+    <div class="flex flex-col items-center gap-space-xs text-center">
+      <span class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Create your account</span>
+      <p class="font-body-sm text-body-sm text-on-surface-variant">Get AI-powered coverage in minutes</p>
+    </div>
+
+    <form id="signup-form" class="flex flex-col gap-space-sm p-space-md rounded-2xl bg-surface-container-lowest shadow-sm">
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Full name</span>
+        <input id="full_name" type="text" required minlength="2" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant outline-none focus:ring-2 focus:ring-secondary"/>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Email</span>
+        <input id="email" type="email" required class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant outline-none focus:ring-2 focus:ring-secondary"/>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Phone (optional)</span>
+        <input id="phone" type="tel" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant outline-none focus:ring-2 focus:ring-secondary"/>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Password</span>
+        <input id="password" type="password" required minlength="8" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant outline-none focus:ring-2 focus:ring-secondary"/>
+        <span class="font-body-sm text-body-sm text-on-surface-variant">At least 8 characters</span>
+      </label>
+
+      <p id="error" class="text-error font-body-sm text-body-sm hidden"></p>
+
+      <button type="submit" class="mt-1 w-full py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold shadow-sm active:scale-95 transition-transform">
+        Create account
+      </button>
+    </form>
+
+    <p class="text-center font-body-sm text-body-sm text-on-surface-variant">
+      Already have an account? <a href="/login.html" class="text-secondary font-semibold">Sign in</a>
+    </p>
+  </div>
+
+  <script src="/static/js/api.js"></script>
+  <script>
+    document.getElementById("signup-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("error");
+      errorEl.classList.add("hidden");
+
+      const payload = {
+        full_name: document.getElementById("full_name").value,
+        email: document.getElementById("email").value,
+        phone: document.getElementById("phone").value || null,
+        password: document.getElementById("password").value,
+      };
+
+      try {
+        const data = await apiFetch("/auth/signup", { method: "POST", body: JSON.stringify(payload) });
+        setSession(data.access_token, data.user);
+        window.location.href = "/dashboard.html";
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.classList.remove("hidden");
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><title>OmniSure</title></head>
+<body>
+<script src="/static/js/api.js"></script>
+<script>
+  const user = getUser();
+  if (getToken() && user) {
+    window.location.href = user.role === "admin" ? "/admin.html" : "/dashboard.html";
+  } else {
+    window.location.href = "/login.html";
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OmniSure — Admin</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/static/js/tailwind-config.js"></script>
+</head>
+<body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen">
+<header class="sticky top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_12px_rgba(11,28,48,0.03)]">
+  <div class="h-16 px-margin flex items-center justify-between">
+    <span class="font-headline-sm text-headline-sm tracking-tight text-on-surface">OmniSure Admin</span>
+    <button id="logout-btn" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Sign out</button>
+  </div>
+</header>
+
+<main class="flex-1 w-full px-margin py-space-md max-w-3xl mx-auto">
+  <h1 class="font-headline-xl-mobile text-headline-xl-mobile mb-space-md">Platform overview</h1>
+  <div id="kpi-grid" class="grid grid-cols-2 gap-space-sm"></div>
+</main>
+
+<script src="/static/js/api.js"></script>
+<script>
+  requireAuth();
+  const user = getUser();
+  if (!user || user.role !== "admin") {
+    window.location.href = "/dashboard.html";
+  }
+
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    clearSession();
+    window.location.href = "/login.html";
+  });
+
+  const LABELS = {
+    total_customers: "Total Customers",
+    total_employees: "Total Employees",
+    active_policies: "Active Policies",
+    total_claims: "Total Claims",
+    settled_claims: "Settled Claims",
+    pending_claims: "Pending Claims",
+  };
+
+  apiFetch("/admin/kpis").then((kpis) => {
+    const grid = document.getElementById("kpi-grid");
+    grid.innerHTML = Object.entries(kpis)
+      .map(
+        ([key, value]) => `
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col justify-between h-24">
+        <span class="font-label-md text-label-md text-on-surface-variant">${LABELS[key] || key}</span>
+        <span class="font-headline-lg text-headline-lg text-on-surface">${value}</span>
+      </div>`
+      )
+      .join("");
+  });
+</script>
+</body>
+</html>
