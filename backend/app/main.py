@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api.v1 import admin, auth, catalog, dashboard, datasets
+from app.api.v1 import admin, advisor, auth, catalog, dashboard, datasets, documents
 from app.config import settings
 
 app = FastAPI(
@@ -24,6 +24,8 @@ app.include_router(catalog.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)
 app.include_router(datasets.router)
+app.include_router(documents.router)
+app.include_router(advisor.router)
 
 # Serve the frontend (static HTML/CSS/JS built from the Stitch design).
 app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")

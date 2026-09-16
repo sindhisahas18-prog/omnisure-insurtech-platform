@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OmniSure — Policy Documents</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/static/js/tailwind-config.js"></script>
+</head>
+<body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen">
+<header class="sticky top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_12px_rgba(11,28,48,0.03)]">
+  <div class="h-16 px-margin flex items-center justify-between">
+    <div class="flex items-center gap-space-md">
+      <span class="font-headline-sm text-headline-sm tracking-tight text-on-surface">OmniSure Admin</span>
+      <a href="/admin.html" class="font-label-sm text-label-sm text-on-surface-variant">Overview</a>
+      <a href="/datasets.html" class="font-label-sm text-label-sm text-on-surface-variant">Datasets</a>
+      <span class="font-label-sm text-label-sm text-secondary font-semibold">Documents</span>
+    </div>
+    <button id="logout-btn" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Sign out</button>
+  </div>
+</header>
+
+<main class="flex-1 w-full px-margin py-space-md max-w-3xl mx-auto flex flex-col gap-space-lg">
+  <div class="flex flex-col gap-1">
+    <h1 class="font-headline-xl-mobile text-headline-xl-mobile">Policy document knowledge base</h1>
+    <p class="font-body-sm text-body-sm text-on-surface-variant">
+      Upload policy wordings (PDF or .txt). Each document is chunked, embedded, and added to that
+      insurance type's retrieval index — the AI Advisor only answers from what's actually indexed here.
+    </p>
+  </div>
+
+  <section class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+    <h2 class="font-headline-sm text-headline-sm">Upload a policy document</h2>
+    <form id="upload-form" class="flex flex-col gap-space-sm">
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Insurance type</span>
+        <select id="insurance_type_code" required class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"></select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Title</span>
+        <input id="title" type="text" required placeholder="e.g. Comprehensive Car Policy Wording" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"/>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">File (.pdf or .txt)</span>
+        <input id="file" type="file" required accept=".pdf,.txt" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"/>
+      </label>
+      <p id="upload-error" class="text-error font-body-sm text-body-sm hidden"></p>
+      <button type="submit" class="w-full py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold">Upload &amp; index</button>
+    </form>
+  </section>
+
+  <section class="flex flex-col gap-space-sm">
+    <h2 class="font-headline-sm text-headline-sm">Documents</h2>
+    <div id="documents-list" class="flex flex-col gap-space-sm"></div>
+  </section>
+</main>
+
+<script src="/static/js/api.js"></script>
+<script>
+  requireAuth();
+  const user = getUser();
+  if (!user || user.role !== "admin") window.location.href = "/dashboard.html";
+
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    clearSession();
+    window.location.href = "/login.html";
+  });
+
+  async function loadInsuranceTypeOptions() {
+    const types = await apiFetch("/catalog/insurance-types");
+    document.getElementById("insurance_type_code").innerHTML = types
+      .map((t) => `<option value="${t.code}">${t.name}</option>`)
+      .join("");
+  }
+
+  function statusBadge(status) {
+    const colors = {
+      indexed: "bg-secondary/10 text-secondary",
+      error: "bg-error-container text-on-error-container",
+    };
+    const cls = colors[status] || "bg-surface-container-high text-on-surface-variant";
+    return `<span class="px-2 py-0.5 rounded-full ${cls} font-label-sm text-label-sm">${status}</span>`;
+  }
+
+  async function loadDocuments() {
+    const docs = await apiFetch("/admin/documents");
+    const list = document.getElementById("documents-list");
+    if (docs.length === 0) {
+      list.innerHTML = `<p class="font-body-sm text-body-sm text-on-surface-variant">No policy documents uploaded yet.</p>`;
+      return;
+    }
+    list.innerHTML = docs
+      .map(
+        (d) => `
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-headline-sm text-headline-sm">${d.title}</span>
+            ${statusBadge(d.status)}
+          </div>
+          <span class="font-body-sm text-body-sm text-on-surface-variant">${d.original_filename} · ${d.chunk_count} chunks indexed</span>
+          ${d.error_message ? `<p class="text-error font-body-sm text-body-sm mt-1">${d.error_message}</p>` : ""}
+        </div>
+        <div class="flex gap-2">
+          <button data-id="${d.id}" class="reindex-btn px-3 py-1.5 rounded-xl bg-surface-container-high font-label-sm text-label-sm">Reindex</button>
+          <button data-id="${d.id}" class="delete-btn px-3 py-1.5 rounded-xl bg-error-container text-on-error-container font-label-sm text-label-sm">Delete</button>
+        </div>
+      </div>`
+      )
+      .join("");
+
+    list.querySelectorAll(".reindex-btn").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        await apiFetch(`/admin/documents/${btn.dataset.id}/reindex`, { method: "POST" });
+        loadDocuments();
+      })
+    );
+    list.querySelectorAll(".delete-btn").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        if (!confirm("Delete this document?")) return;
+        await fetch(`/api/v1/admin/documents/${btn.dataset.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
+        loadDocuments();
+      })
+    );
+  }
+
+  document.getElementById("upload-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById("upload-error");
+    errorEl.classList.add("hidden");
+
+    const formData = new FormData();
+    formData.append("insurance_type_code", document.getElementById("insurance_type_code").value);
+    formData.append("title", document.getElementById("title").value);
+    formData.append("file", document.getElementById("file").files[0]);
+
+    try {
+      const res = await fetch("/api/v1/admin/documents/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Upload failed");
+      document.getElementById("upload-form").reset();
+      loadDocuments();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove("hidden");
+    }
+  });
+
+  Promise.all([loadInsuranceTypeOptions(), loadDocuments()]).catch(console.error);
+</script>
+</body>
+</html>

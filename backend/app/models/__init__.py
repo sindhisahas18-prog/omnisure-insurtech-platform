@@ -7,3 +7,4 @@ from app.models.service_plan import (  # noqa: F401
 )
 from app.models.policy import Policy, PolicyStatus  # noqa: F401
 from app.models.dataset import Dataset, DatasetRecord, DatasetStatus  # noqa: F401
+from app.models.document import PolicyDocument, DocumentChunk, DocumentStatus  # noqa: F401

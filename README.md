@@ -6,7 +6,7 @@ Business, Life, and Livestock insurance — built around a reusable insurance
 engine, a structured PostgreSQL database, and (from Phase 2) a RAG knowledge
 base over uploaded policy datasets.
 
-## Status: Phase 1 ✅ Foundation · Phase 2 🚧 In progress (dataset ingestion done)
+## Status: Phase 1 ✅ Foundation · Phase 2 ✅ RAG + AI Advisor
 
 This is the first of 7 planned phases. What's live right now:
 
@@ -43,12 +43,44 @@ This is the first of 7 planned phases. What's live right now:
   dataset (256,136 rows, 66 columns) both ran through the full
   map → validate → clean → import pipeline end-to-end during development
 
-**Not yet implemented**: policy PDF/document processing, embeddings/FAISS,
-the AI advisor and recommendation/comparison engine (rest of Phase 2), the
-claims system, OCR, fraud/risk engine, voice assistant, and analytics
-charts. Nothing here is faked or stubbed to look finished — the dashboard's
-"Open Claims" metric returns real `0` because there's no claims table yet,
-not a placeholder number.
+### Phase 2, completed: RAG knowledge base + AI Insurance Advisor
+
+- `PolicyDocument` / `DocumentChunk` models — upload a PDF or .txt policy
+  wording per insurance type; `document_processing.py` extracts text and
+  splits it into overlapping word-window chunks
+- `embeddings.py` — real OpenAI embeddings (`text-embedding-3-small`) when
+  `OPENAI_API_KEY` is set; otherwise a deterministic hash-based fallback so
+  the whole pipeline runs with zero external setup (clearly reported as
+  `demo_mode: true` everywhere it matters, never presented as a real model)
+- `vector_store.py` — one FAISS flat inner-product index per insurance
+  type, persisted to `backend/data/faiss/`
+- `advisor.py` — the AI Insurance Advisor: combines structured
+  `DatasetRecord` filtering (budget, canonical fields via each dataset's
+  column mapping) with FAISS-retrieved document excerpts, then composes an
+  answer — templated in demo mode, via `gpt-4o-mini` when a key is
+  configured. **Grounding is enforced, not just requested**: if nothing
+  relevant is retrieved, it returns the exact required message
+  ("I couldn't find enough information in the available insurance data to
+  answer this accurately.") instead of the LLM improvising
+- Admin UI: `/documents.html` (upload/reindex/delete policy documents)
+- Customer UI: an "AI Insurance Advisor" panel on `/dashboard.html` — ask a
+  question, optionally set a ₹ budget, get a grounded answer plus the
+  specific matched policies
+
+**Verified end-to-end**, not just unit-tested in isolation: a sample car
+policy document was uploaded → chunked → embedded → indexed → and
+correctly retrieved by the advisor for a question about deductibles and
+exclusions, with the answer's excerpt traceable word-for-word back to the
+source document. The "insufficient data" fallback was verified too, for an
+insurance type with nothing indexed yet.
+
+**Not yet implemented**: the claims system (FNOL, dynamic questions,
+document upload + OCR, damage analysis, coverage verification, triage),
+fraud/risk engine, STP vs. human review, voice assistant, renewal +
+parametric insurance, and analytics dashboards. Nothing here is faked or
+stubbed to look finished — the customer dashboard's "Open Claims" metric
+returns real `0` because there's no claims table yet, not a placeholder
+number.
 
 ## Project layout
 
@@ -120,11 +152,8 @@ uvicorn app.main:app --reload
   app should degrade to a clearly-labeled demo response instead of
   crashing, never pretend a real result.
 
-## Roadmap (phases 2–7)
+## Roadmap (phases 3–7)
 
-2. Dataset ingestion, cleaning, validation + structured DB import; policy
-   PDF processing; FAISS-based RAG; AI insurance advisor, recommendation,
-   and comparison
 3. Full claims system: FNOL, dynamic per-insurance-type questions, document
    upload + OCR, AI damage analysis, coverage verification, triage
 4. Voice assistant (STT/TTS), AI intent detection and action execution
@@ -134,4 +163,4 @@ uvicorn app.main:app --reload
 7. Policy renewal reminders + parametric insurance (configurable trigger →
    payout)
 
-Each phase adds routes/tables without breaking what Phase 1 already ships.
+Each phase adds routes/tables without breaking what Phases 1–2 already ship.

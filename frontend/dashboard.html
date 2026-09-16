@@ -49,6 +49,17 @@
   </section>
 
   <section class="flex flex-col gap-space-sm">
+    <h2 class="font-headline-sm text-headline-sm text-on-surface">AI Insurance Advisor</h2>
+    <form id="advisor-form" class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+      <select id="advisor-type" required class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"></select>
+      <textarea id="advisor-query" required minlength="3" rows="2" placeholder="e.g. What's covered and what's the deductible?" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant resize-none"></textarea>
+      <input id="advisor-budget" type="number" min="0" placeholder="Budget in ₹ (optional)" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"/>
+      <button type="submit" class="py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold">Ask the advisor</button>
+    </form>
+    <div id="advisor-result" class="hidden p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm"></div>
+  </section>
+
+  <section class="flex flex-col gap-space-sm">
     <h2 class="font-headline-sm text-headline-sm text-on-surface">Explore insurance</h2>
     <div id="insurance-types" class="grid grid-cols-3 gap-space-sm"></div>
   </section>
@@ -143,7 +154,51 @@
       .join("");
   }
 
-  Promise.all([loadSummary(), loadInsuranceTypes(), loadServicePlans()]).catch((err) => {
+  async function populateAdvisorTypes() {
+    const types = await apiFetch("/catalog/insurance-types");
+    document.getElementById("advisor-type").innerHTML = types.map((t) => `<option value="${t.code}">${t.name}</option>`).join("");
+  }
+
+  document.getElementById("advisor-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const resultEl = document.getElementById("advisor-result");
+    resultEl.classList.remove("hidden");
+    resultEl.innerHTML = `<p class="font-body-sm text-body-sm text-on-surface-variant">Thinking...</p>`;
+
+    const budget = document.getElementById("advisor-budget").value;
+    try {
+      const data = await apiFetch("/advisor/ask", {
+        method: "POST",
+        body: JSON.stringify({
+          insurance_type_code: document.getElementById("advisor-type").value,
+          query: document.getElementById("advisor-query").value,
+          budget_inr: budget ? Number(budget) : null,
+        }),
+      });
+
+      const candidatesHtml = data.candidates.length
+        ? `<ul class="list-disc list-inside font-body-sm text-body-sm">${data.candidates
+            .map((c) => {
+              const parts = [];
+              if (c.insurer_name) parts.push(c.insurer_name);
+              if (c.premium) parts.push(formatINR(c.premium) + " premium");
+              if (c.sum_insured) parts.push(formatINR(c.sum_insured) + " sum insured");
+              return `<li>${parts.join(" · ")}</li>`;
+            })
+            .join("")}</ul>`
+        : "";
+
+      resultEl.innerHTML = `
+        <p class="font-body-md text-body-md whitespace-pre-line">${data.answer}</p>
+        ${candidatesHtml}
+        ${data.demo_mode ? '<p class="font-body-sm text-body-sm text-on-surface-variant italic">Running in demo mode (no LLM key configured) — answer is templated directly from your data, not model-generated.</p>' : ""}
+      `;
+    } catch (err) {
+      resultEl.innerHTML = `<p class="text-error font-body-sm text-body-sm">${err.message}</p>`;
+    }
+  });
+
+  Promise.all([loadSummary(), loadInsuranceTypes(), loadServicePlans(), populateAdvisorTypes()]).catch((err) => {
     console.error(err);
   });
 </script>
