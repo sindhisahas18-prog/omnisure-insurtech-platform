@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OmniSure — Claims Review</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/static/js/tailwind-config.js"></script>
+</head>
+<body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen">
+<header class="sticky top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_12px_rgba(11,28,48,0.03)]">
+  <div class="h-16 px-margin flex items-center justify-between">
+    <span class="font-headline-sm text-headline-sm tracking-tight text-on-surface">OmniSure Claims Review</span>
+    <div class="flex items-center gap-space-sm">
+      <span id="user-name" class="font-label-md text-label-md text-on-surface-variant"></span>
+      <button id="logout-btn" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Sign out</button>
+    </div>
+  </div>
+</header>
+
+<main class="flex-1 w-full px-margin py-space-md max-w-2xl mx-auto flex flex-col gap-space-lg">
+
+  <div id="queue-view" class="flex flex-col gap-space-md">
+    <h1 class="font-headline-xl-mobile text-headline-xl-mobile">Claims needing review</h1>
+    <div id="queue-list" class="flex flex-col gap-space-sm"></div>
+
+    <h2 class="font-headline-sm text-headline-sm mt-4">All claims</h2>
+    <div id="all-list" class="flex flex-col gap-space-sm"></div>
+  </div>
+
+  <div id="detail-view" class="hidden flex flex-col gap-space-md"></div>
+</main>
+
+<script src="/static/js/api.js"></script>
+<script>
+  requireAuth();
+  const user = getUser();
+  if (!user || (user.role !== "employee" && user.role !== "admin")) {
+    window.location.href = "/dashboard.html";
+  }
+  document.getElementById("user-name").textContent = user.full_name;
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    clearSession();
+    window.location.href = "/login.html";
+  });
+
+  function statusBadge(status) {
+    const colors = {
+      settled: "bg-secondary/10 text-secondary",
+      rejected: "bg-error-container text-on-error-container",
+      human_review: "bg-tertiary-container text-on-tertiary-container",
+    };
+    return `<span class="px-2 py-0.5 rounded-full ${colors[status] || "bg-surface-container-high text-on-surface-variant"} font-label-sm text-label-sm">${status.replace("_", " ")}</span>`;
+  }
+
+  function claimRow(c) {
+    return `
+      <button data-id="${c.id}" class="claim-row text-left p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-headline-sm text-headline-sm">${c.claim_number}</span>
+            ${statusBadge(c.status)}
+          </div>
+          <span class="font-body-sm text-body-sm text-on-surface-variant">${c.incident_type || ""} ${c.damaged_component ? "· " + c.damaged_component : ""} ${c.fraud_risk_score !== null ? "· risk " + c.fraud_risk_score : ""}</span>
+        </div>
+        ${c.claimed_amount_inr ? `<span class="font-label-lg text-label-lg">${formatINR(c.claimed_amount_inr)}</span>` : ""}
+      </button>`;
+  }
+
+  async function loadQueue() {
+    const [pending, all] = await Promise.all([
+      apiFetch("/admin/claims?status_filter=human_review"),
+      apiFetch("/admin/claims"),
+    ]);
+    document.getElementById("queue-list").innerHTML =
+      pending.length === 0
+        ? `<p class="font-body-sm text-body-sm text-on-surface-variant">Nothing pending review right now.</p>`
+        : pending.map(claimRow).join("");
+    document.getElementById("all-list").innerHTML = all.map(claimRow).join("");
+
+    document.querySelectorAll(".claim-row").forEach((btn) =>
+      btn.addEventListener("click", () => showDetail(btn.dataset.id))
+    );
+  }
+
+  async function showDetail(id) {
+    document.getElementById("queue-view").classList.add("hidden");
+    const detailView = document.getElementById("detail-view");
+    detailView.classList.remove("hidden");
+
+    const c = await apiFetch(`/admin/claims/${id}`);
+    const docs = c.documents
+      .map(
+        (d) => `<li>${d.doc_type} — ${d.original_filename}${d.ocr_text ? ` — OCR: "${d.ocr_text.slice(0, 120)}${d.ocr_text.length > 120 ? "…" : ""}"` : ""}</li>`
+      )
+      .join("");
+    const timeline = c.events
+      .map((e) => `<li><strong>${e.event_type.replace("_", " ")}</strong> — ${e.status}</li>`)
+      .join("");
+
+    const reviewForm =
+      c.status === "human_review"
+        ? `
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+        <h2 class="font-headline-sm text-headline-sm">Decision</h2>
+        <label class="flex flex-col gap-1">
+          <span class="font-label-md text-label-md text-on-surface-variant">Approved amount (₹, if approving)</span>
+          <input id="approved-amount" type="number" min="0" value="${c.claimed_amount_inr || ""}" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"/>
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="font-label-md text-label-md text-on-surface-variant">Note</span>
+          <textarea id="review-note" rows="2" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant resize-none"></textarea>
+        </label>
+        <div class="flex gap-space-sm">
+          <button id="approve-btn" class="flex-1 py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold">Approve &amp; settle</button>
+          <button id="reject-btn" class="flex-1 py-2.5 rounded-xl bg-error-container text-on-error-container font-label-lg text-label-lg font-semibold">Reject</button>
+        </div>
+      </div>`
+        : "";
+
+    detailView.innerHTML = `
+      <button id="back-btn" class="text-left font-label-sm text-label-sm text-secondary font-semibold">← Back to queue</button>
+      <div class="flex items-center gap-2">
+        <h1 class="font-headline-xl-mobile text-headline-xl-mobile">${c.claim_number}</h1>
+        ${statusBadge(c.status)}
+      </div>
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-1">
+        <p class="font-body-sm text-body-sm"><strong>Incident:</strong> ${c.incident_type || "—"} · ${c.damaged_component || "—"} on ${c.incident_date || "—"}</p>
+        <p class="font-body-sm text-body-sm"><strong>Description:</strong> ${c.description || "—"}</p>
+        <p class="font-body-sm text-body-sm"><strong>Claimed:</strong> ${c.claimed_amount_inr ? formatINR(c.claimed_amount_inr) : "—"}</p>
+        <p class="font-body-sm text-body-sm"><strong>Coverage:</strong> ${c.coverage_verified || "—"} — ${c.coverage_notes || ""}</p>
+        <p class="font-body-sm text-body-sm"><strong>Fraud/risk score:</strong> ${c.fraud_risk_score ?? "—"}/100</p>
+        ${c.fraud_risk_reasons && c.fraud_risk_reasons.length ? `<ul class="list-disc list-inside font-body-sm text-body-sm text-on-surface-variant">${c.fraud_risk_reasons.map((r) => `<li>${r}</li>`).join("")}</ul>` : ""}
+        ${c.human_review_reasons && c.human_review_reasons.length ? `<p class="font-body-sm text-body-sm mt-1"><strong>Why it's here:</strong></p><ul class="list-disc list-inside font-body-sm text-body-sm text-on-surface-variant">${c.human_review_reasons.map((r) => `<li>${r}</li>`).join("")}</ul>` : ""}
+      </div>
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm">
+        <h2 class="font-headline-sm text-headline-sm mb-2">Documents</h2>
+        <ul class="list-disc list-inside font-body-sm text-body-sm">${docs || "<li>None uploaded</li>"}</ul>
+      </div>
+      ${reviewForm}
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm">
+        <h2 class="font-headline-sm text-headline-sm mb-2">Timeline</h2>
+        <ul class="list-disc list-inside font-body-sm text-body-sm">${timeline || "<li>No activity yet</li>"}</ul>
+      </div>
+    `;
+
+    document.getElementById("back-btn").addEventListener("click", () => {
+      detailView.classList.add("hidden");
+      document.getElementById("queue-view").classList.remove("hidden");
+      loadQueue();
+    });
+
+    const approveBtn = document.getElementById("approve-btn");
+    const rejectBtn = document.getElementById("reject-btn");
+    if (approveBtn) {
+      approveBtn.addEventListener("click", () => decide(id, true));
+      rejectBtn.addEventListener("click", () => decide(id, false));
+    }
+  }
+
+  async function decide(id, approve) {
+    const amount = document.getElementById("approved-amount").value;
+    const note = document.getElementById("review-note").value;
+    await apiFetch(`/admin/claims/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({
+        approve,
+        approved_amount_inr: amount ? Number(amount) : null,
+        note,
+      }),
+    });
+    showDetail(id);
+  }
+
+  loadQueue();
+</script>
+</body>
+</html>

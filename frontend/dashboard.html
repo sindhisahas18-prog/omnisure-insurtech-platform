@@ -16,6 +16,7 @@
   <div class="h-16 px-margin flex items-center justify-between">
     <span class="font-headline-sm text-headline-sm tracking-tight text-on-surface">OmniSure</span>
     <div class="flex items-center gap-space-sm">
+      <a href="/claims.html" class="font-label-sm text-label-sm text-on-surface-variant">My Claims</a>
       <span id="user-name" class="font-label-md text-label-md text-on-surface-variant"></span>
       <button id="logout-btn" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Sign out</button>
     </div>
@@ -115,6 +116,7 @@
           <span class="font-body-sm text-body-sm">Premium: <strong>${formatINR(p.premium_inr)}</strong></span>
           ${p.sum_insured_inr ? `<span class="font-body-sm text-body-sm">Sum insured: <strong>${formatINR(p.sum_insured_inr)}</strong></span>` : ""}
         </div>
+        ${p.status === "active" ? `<a href="/claims.html?policy_id=${p.id}&type=${p.insurance_type.code}" class="inline-block mt-1 px-3 py-1.5 rounded-xl bg-secondary/10 text-secondary font-label-sm text-label-sm font-semibold">File a Claim</a>` : ""}
       </div>`
       )
       .join("");

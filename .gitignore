@@ -11,3 +11,4 @@ alembic/versions/__pycache__/
 data/uploads/
 data/faiss/
 data/documents/
+data/claim_documents/

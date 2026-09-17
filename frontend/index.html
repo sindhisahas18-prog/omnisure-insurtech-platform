@@ -6,7 +6,7 @@
 <script>
   const user = getUser();
   if (getToken() && user) {
-    window.location.href = user.role === "admin" ? "/admin.html" : "/dashboard.html";
+    window.location.href = user.role === "admin" ? "/admin.html" : (user.role === "employee" ? "/claims-review.html" : "/dashboard.html");
   } else {
     window.location.href = "/login.html";
   }

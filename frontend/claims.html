@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OmniSure — Claims</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/static/js/tailwind-config.js"></script>
+</head>
+<body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen">
+<header class="sticky top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_12px_rgba(11,28,48,0.03)]">
+  <div class="h-16 px-margin flex items-center justify-between">
+    <div class="flex items-center gap-space-md">
+      <a href="/dashboard.html" class="font-headline-sm text-headline-sm tracking-tight text-on-surface">OmniSure</a>
+      <span class="font-label-sm text-label-sm text-secondary font-semibold">Claims</span>
+    </div>
+    <button id="logout-btn" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-label-sm">Sign out</button>
+  </div>
+</header>
+
+<main class="flex-1 w-full px-margin py-space-md max-w-2xl mx-auto flex flex-col gap-space-lg">
+
+  <!-- LIST VIEW -->
+  <div id="list-view" class="flex flex-col gap-space-md">
+    <div class="flex items-center justify-between">
+      <h1 class="font-headline-xl-mobile text-headline-xl-mobile">My claims</h1>
+      <a href="/dashboard.html" class="font-label-sm text-label-sm text-secondary font-semibold">File a new claim →</a>
+    </div>
+    <div id="claims-list" class="flex flex-col gap-space-sm"></div>
+  </div>
+
+  <!-- NEW CLAIM WIZARD -->
+  <div id="wizard-view" class="hidden flex flex-col gap-space-md">
+    <h1 class="font-headline-xl-mobile text-headline-xl-mobile">File a claim</h1>
+    <div id="wizard-step-fnol" class="wizard-step p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+      <h2 class="font-headline-sm text-headline-sm">1. What happened?</h2>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Incident type</span>
+        <select id="incident_type" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"></select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">What's affected?</span>
+        <select id="damaged_component" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"></select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Incident date</span>
+        <input id="incident_date" type="date" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"/>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">Estimated claim amount (₹)</span>
+        <input id="claimed_amount_inr" type="number" min="0" class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"/>
+      </label>
+      <button id="to-questions-btn" class="py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold">Continue</button>
+    </div>
+
+    <div id="wizard-step-questions" class="hidden wizard-step p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+      <h2 class="font-headline-sm text-headline-sm">2. A few more details</h2>
+      <div id="dynamic-questions" class="flex flex-col gap-space-sm"></div>
+      <button id="to-documents-btn" class="py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold">Continue</button>
+    </div>
+
+    <div id="wizard-step-documents" class="hidden wizard-step p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+      <h2 class="font-headline-sm text-headline-sm">3. Upload documents</h2>
+      <p class="font-body-sm text-body-sm text-on-surface-variant">Uploading everything now gives your claim the best chance of automatic approval.</p>
+      <div id="document-uploads" class="flex flex-col gap-space-sm"></div>
+      <p id="submit-error" class="text-error font-body-sm text-body-sm hidden"></p>
+      <button id="submit-claim-btn" class="py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold">Submit claim</button>
+    </div>
+  </div>
+
+  <!-- RESULT VIEW -->
+  <div id="result-view" class="hidden flex flex-col gap-space-md"></div>
+
+  <!-- DETAIL VIEW -->
+  <div id="detail-view" class="hidden flex flex-col gap-space-md"></div>
+</main>
+
+<script src="/static/js/api.js"></script>
+<script>
+  requireAuth();
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    clearSession();
+    window.location.href = "/login.html";
+  });
+
+  const params = new URLSearchParams(window.location.search);
+  const policyId = params.get("policy_id");
+  const insuranceTypeCode = params.get("type");
+  const claimId = params.get("claim_id");
+
+  const listView = document.getElementById("list-view");
+  const wizardView = document.getElementById("wizard-view");
+  const resultView = document.getElementById("result-view");
+  const detailView = document.getElementById("detail-view");
+
+  function hideAll() {
+    [listView, wizardView, resultView, detailView].forEach((el) => el.classList.add("hidden"));
+  }
+
+  function statusBadge(status) {
+    const colors = {
+      settled: "bg-secondary/10 text-secondary",
+      rejected: "bg-error-container text-on-error-container",
+      human_review: "bg-surface-container-high text-on-surface-variant",
+      draft: "bg-surface-container-high text-on-surface-variant",
+    };
+    return `<span class="px-2 py-0.5 rounded-full ${colors[status] || "bg-surface-container-high text-on-surface-variant"} font-label-sm text-label-sm">${status.replace("_", " ")}</span>`;
+  }
+
+  async function renderList() {
+    hideAll();
+    listView.classList.remove("hidden");
+    const claims = await apiFetch("/claims");
+    const list = document.getElementById("claims-list");
+    if (claims.length === 0) {
+      list.innerHTML = `<p class="font-body-sm text-body-sm text-on-surface-variant">No claims filed yet. Go to your dashboard and click "File a Claim" on any active policy.</p>`;
+      return;
+    }
+    list.innerHTML = claims
+      .map(
+        (c) => `
+      <a href="/claims.html?claim_id=${c.id}" class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-headline-sm text-headline-sm">${c.claim_number}</span>
+            ${statusBadge(c.status)}
+          </div>
+          <span class="font-body-sm text-body-sm text-on-surface-variant">${c.incident_type || ""} ${c.damaged_component ? "· " + c.damaged_component : ""}</span>
+        </div>
+        ${c.approved_amount_inr ? `<span class="font-label-lg text-label-lg">${formatINR(c.approved_amount_inr)}</span>` : ""}
+      </a>`
+      )
+      .join("");
+  }
+
+  async function renderDetail(id) {
+    hideAll();
+    detailView.classList.remove("hidden");
+    const c = await apiFetch(`/claims/${id}`);
+    const timeline = c.events
+      .map((e) => `<li><strong>${e.event_type.replace("_", " ")}</strong> — ${e.status} <span class="text-on-surface-variant">(${new Date(e.created_at).toLocaleString()})</span></li>`)
+      .join("");
+    const docs = c.documents
+      .map((d) => `<li>${d.doc_type} — ${d.original_filename} ${d.ocr_status === "error" ? '<span class="text-error">(OCR failed)</span>' : ""}</li>`)
+      .join("");
+
+    detailView.innerHTML = `
+      <a href="/claims.html" class="font-label-sm text-label-sm text-secondary font-semibold">← All claims</a>
+      <div class="flex items-center gap-2">
+        <h1 class="font-headline-xl-mobile text-headline-xl-mobile">${c.claim_number}</h1>
+        ${statusBadge(c.status)}
+      </div>
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-1">
+        <p class="font-body-sm text-body-sm"><strong>Incident:</strong> ${c.incident_type || "—"} ${c.damaged_component ? "· " + c.damaged_component : ""}</p>
+        <p class="font-body-sm text-body-sm"><strong>Coverage:</strong> ${c.coverage_verified || "pending"} — ${c.coverage_notes || ""}</p>
+        <p class="font-body-sm text-body-sm"><strong>Claimed:</strong> ${c.claimed_amount_inr ? formatINR(c.claimed_amount_inr) : "—"} &nbsp; <strong>Approved:</strong> ${c.approved_amount_inr ? formatINR(c.approved_amount_inr) : "—"}</p>
+        ${c.payment ? `<p class="font-body-sm text-body-sm"><strong>Payment:</strong> ${formatINR(c.payment.amount_inr)} · ${c.payment.status} ${c.payment.reference ? "· " + c.payment.reference : ""}</p>` : ""}
+      </div>
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm">
+        <h2 class="font-headline-sm text-headline-sm mb-2">Documents</h2>
+        <ul class="list-disc list-inside font-body-sm text-body-sm">${docs || "<li>None uploaded</li>"}</ul>
+      </div>
+      <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm">
+        <h2 class="font-headline-sm text-headline-sm mb-2">Timeline</h2>
+        <ul class="list-disc list-inside font-body-sm text-body-sm">${timeline || "<li>No activity yet</li>"}</ul>
+      </div>
+    `;
+  }
+
+  // ---- Wizard state ----
+  let claimConfig = null;
+  let createdClaimId = null;
+
+  async function initWizard() {
+    hideAll();
+    wizardView.classList.remove("hidden");
+    claimConfig = await apiFetch(`/claims/config/${insuranceTypeCode}`);
+
+    document.getElementById("incident_type").innerHTML = claimConfig.incident_types
+      .map((t) => `<option value="${t}">${t}</option>`)
+      .join("");
+    document.getElementById("damaged_component").innerHTML = claimConfig.damaged_components
+      .map((c) => `<option value="${c}">${c}</option>`)
+      .join("");
+  }
+
+  function renderQuestions() {
+    const component = document.getElementById("damaged_component").value;
+    const applicable = claimConfig.dynamic_questions.filter(
+      (q) => !q.applies_to || q.applies_to.length === 0 || q.applies_to.includes(component)
+    );
+    document.getElementById("dynamic-questions").innerHTML = applicable
+      .map((q) => {
+        if (q.type === "select") {
+          return `<label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">${q.label}</span>
+            <select data-key="${q.key}" class="dq px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant">
+              ${q.options.map((o) => `<option value="${o}">${o}</option>`).join("")}
+            </select></label>`;
+        }
+        const inputType = { text: "text", number: "number", date: "date", textarea: "textarea" }[q.type] || "text";
+        return inputType === "textarea"
+          ? `<label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">${q.label}</span>
+              <textarea data-key="${q.key}" rows="2" class="dq px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant resize-none"></textarea></label>`
+          : `<label class="flex flex-col gap-1"><span class="font-label-md text-label-md text-on-surface-variant">${q.label}</span>
+              <input data-key="${q.key}" type="${inputType}" class="dq px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"/></label>`;
+      })
+      .join("");
+  }
+
+  document.getElementById("to-questions-btn").addEventListener("click", () => {
+    document.getElementById("wizard-step-fnol").classList.add("hidden");
+    document.getElementById("wizard-step-questions").classList.remove("hidden");
+    renderQuestions();
+  });
+
+  document.getElementById("to-documents-btn").addEventListener("click", async () => {
+    document.getElementById("wizard-step-questions").classList.add("hidden");
+    document.getElementById("wizard-step-documents").classList.remove("hidden");
+
+    const answers = {};
+    document.querySelectorAll(".dq").forEach((el) => (answers[el.dataset.key] = el.value));
+
+    const claim = await apiFetch("/claims", {
+      method: "POST",
+      body: JSON.stringify({
+        policy_id: policyId,
+        incident_type: document.getElementById("incident_type").value,
+        damaged_component: document.getElementById("damaged_component").value,
+        incident_date: document.getElementById("incident_date").value || null,
+        claimed_amount_inr: document.getElementById("claimed_amount_inr").value
+          ? Number(document.getElementById("claimed_amount_inr").value)
+          : null,
+        answers,
+      }),
+    });
+    createdClaimId = claim.id;
+
+    document.getElementById("document-uploads").innerHTML = claimConfig.required_documents
+      .map(
+        (doc) => `<label class="flex flex-col gap-1">
+        <span class="font-label-md text-label-md text-on-surface-variant">${doc}</span>
+        <input type="file" data-doctype="${doc}" class="claim-doc-input px-3 py-2 rounded-xl bg-surface-container-low border border-outline-variant"/>
+      </label>`
+      )
+      .join("");
+  });
+
+  document.getElementById("submit-claim-btn").addEventListener("click", async () => {
+    const errorEl = document.getElementById("submit-error");
+    errorEl.classList.add("hidden");
+    const btn = document.getElementById("submit-claim-btn");
+    btn.disabled = true;
+    btn.textContent = "Submitting...";
+
+    try {
+      const inputs = document.querySelectorAll(".claim-doc-input");
+      for (const input of inputs) {
+        if (!input.files[0]) continue;
+        const formData = new FormData();
+        formData.append("doc_type", input.dataset.doctype);
+        formData.append("file", input.files[0]);
+        const res = await fetch(`/api/v1/claims/${createdClaimId}/documents`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getToken()}` },
+          body: formData,
+        });
+        if (!res.ok) throw new Error((await res.json()).detail || "Document upload failed");
+      }
+
+      const result = await apiFetch(`/claims/${createdClaimId}/submit`, { method: "POST" });
+
+      hideAll();
+      resultView.classList.remove("hidden");
+      const outcome =
+        result.status === "settled"
+          ? `<p class="font-headline-sm text-headline-sm text-secondary">Approved &amp; settled automatically</p>
+             <p class="font-body-md text-body-md">Approved amount: <strong>${formatINR(result.approved_amount_inr)}</strong></p>`
+          : `<p class="font-headline-sm text-headline-sm">Sent for review</p>
+             <p class="font-body-md text-body-md text-on-surface-variant">Our team will review this claim before a decision is made.</p>`;
+      resultView.innerHTML = `
+        <div class="p-space-lg rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
+          <h1 class="font-headline-xl-mobile text-headline-xl-mobile">${result.claim_number} submitted</h1>
+          ${outcome}
+          <a href="/claims.html?claim_id=${result.id}" class="mt-2 text-center py-2.5 rounded-xl bg-secondary text-on-secondary font-label-lg text-label-lg font-semibold">View claim details</a>
+        </div>`;
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Submit claim";
+    }
+  });
+
+  // ---- Route to the right view ----
+  if (claimId) {
+    renderDetail(claimId);
+  } else if (policyId && insuranceTypeCode) {
+    initWizard();
+  } else {
+    renderList();
+  }
+</script>
+</body>
+</html>

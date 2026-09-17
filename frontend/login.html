@@ -57,7 +57,7 @@
       try {
         const data = await apiFetch("/auth/login", { method: "POST", body });
         setSession(data.access_token, data.user);
-        window.location.href = data.user.role === "admin" ? "/admin.html" : "/dashboard.html";
+        window.location.href = data.user.role === "admin" ? "/admin.html" : (data.user.role === "employee" ? "/claims-review.html" : "/dashboard.html");
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.classList.remove("hidden");

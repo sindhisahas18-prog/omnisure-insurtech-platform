@@ -6,7 +6,7 @@ Business, Life, and Livestock insurance — built around a reusable insurance
 engine, a structured PostgreSQL database, and (from Phase 2) a RAG knowledge
 base over uploaded policy datasets.
 
-## Status: Phase 1 ✅ Foundation · Phase 2 ✅ RAG + AI Advisor
+## Status: Phase 1 ✅ Foundation · Phase 2 ✅ RAG + AI Advisor · Phase 3 ✅ Claims System
 
 This is the first of 7 planned phases. What's live right now:
 
@@ -74,13 +74,68 @@ exclusions, with the answer's excerpt traceable word-for-word back to the
 source document. The "insufficient data" fallback was verified too, for an
 insurance type with nothing indexed yet.
 
-**Not yet implemented**: the claims system (FNOL, dynamic questions,
-document upload + OCR, damage analysis, coverage verification, triage),
-fraud/risk engine, STP vs. human review, voice assistant, renewal +
-parametric insurance, and analytics dashboards. Nothing here is faked or
-stubbed to look finished — the customer dashboard's "Open Claims" metric
-returns real `0` because there's no claims table yet, not a placeholder
-number.
+### Phase 3, completed: full claims system
+
+- **Reusable claim engine, not per-type code**: `ClaimConfig` (one row per
+  insurance type) holds incident types, damaged components/claim
+  categories, required documents, and dynamic questions (each tagged with
+  which component it applies to, or all of them). Adding insurance type 13
+  means adding a config row, never a new `if`/`elif` branch. Seeded for all
+  12 types straight from the product spec's own component lists (Car:
+  Bumper/Headlight/Door/..., Health: Hospitalization/Surgery/ICU/...,
+  Travel: Flight Delay/Lost Baggage/..., and so on)
+- **Full FNOL → settlement flow**: file a claim against a policy → answer
+  the dynamic questions for that type + component → upload required
+  documents (OCR'd on upload — real Tesseract for images, real text
+  extraction for PDFs) → submit → automatic triage
+- **Coverage verification**: explicit rule checks (policy active? right
+  insurance type? incident date inside the policy period? how close to
+  expiry?) — every result traceable to a real field, never guessed
+- **Fraud/risk engine**: rule-based scoring (claim-to-sum-insured ratio,
+  days since policy start, missing documents, recent claim frequency),
+  every point explained in plain language
+- **STP vs. human review routing**: exactly the spec's trigger list — high
+  fraud score, high claim-to-sum-insured ratio, missing documents,
+  coverage uncertainty, low AI confidence, or no claimed amount sends a
+  claim to human review; a clean claim is auto-approved, settled, and
+  paid without a person touching it
+- **AI damage analysis**: real GPT-4o-mini vision analysis of uploaded
+  photos when `OPENAI_API_KEY` is set; otherwise an honest
+  "not automatically assessed, flagged for human review" result — never a
+  fabricated severity/description
+- **Settlement, payment, and email**: `Payment` records on settlement;
+  `send_email` sends for real via SMTP when `EMAIL_SMTP_*` is configured,
+  otherwise logs a clearly-marked demo notification instead of silently
+  doing nothing
+- **Claim tracking**: `ClaimEvent` is an append-only audit trail (coverage
+  check → fraud check → triage decision → assessment → settlement →
+  payment → email), which is what both the customer claim-detail page and
+  the reviewer queue render as a timeline
+- Customer UI: `/claims.html` — file a claim (multi-step wizard: incident
+  → dynamic questions → documents), track status, see full timeline. "File
+  a Claim" buttons appear on active policies on the dashboard
+- Employee/admin UI: `/claims-review.html` — review queue filtered to
+  `human_review`, full claim detail (fraud reasons, documents, OCR text),
+  approve/reject with amount + note
+- New `employee` role, with its own login → claims-review routing
+  (separate from the admin dashboard)
+
+**Verified end-to-end** with two real scenarios run through the actual
+service code (not mocked): a clean small claim with all required documents
+present was auto-approved via STP, settled, and paid, with a correct event
+timeline; a high-value claim filed 4 days after policy start with missing
+documents was correctly scored (fraud risk 80/100) and routed to human
+review with accurate plain-language reasons, then correctly resolved by an
+employee decision to a reduced settlement. Also caught and fixed a real
+bug in the process: `passlib==1.7.4` breaks under modern `bcrypt` (≥4.1
+dropped an attribute passlib reads), which would have broken every
+signup/login in production — pinned `bcrypt==4.0.1` to fix it.
+
+**Not yet implemented**: voice assistant (STT/TTS, intent detection),
+policy renewal reminders + parametric insurance, and the admin analytics
+dashboards (claims-by-type/status charts, STP rate, premium revenue —
+currently only raw KPI numbers, no charts yet). Nothing here is faked or
+stubbed to look finished.
 
 ## Project layout
 
@@ -94,13 +149,17 @@ backend/
     config.py       Settings loaded from environment / .env
     database.py     Engine/session setup
     main.py         FastAPI app, mounts routers + serves /frontend
-    seed.py         Idempotent seed script (insurance types, plans, demo admin)
+    seed.py         Idempotent seed script (insurance types, plans, claim
+                    configs for all 12 types, demo admin + employee)
   alembic/          DB migrations (autogenerate-ready)
   requirements.txt
   .env.example      Copy to .env and fill in
   Dockerfile
 frontend/
-  index.html, login.html, signup.html, dashboard.html, admin.html
+  index.html, login.html, signup.html      auth
+  dashboard.html                           customer home + AI advisor
+  claims.html                              file a claim / track claims
+  admin.html, datasets.html, documents.html, claims-review.html   admin/employee
   static/js/api.js              fetch wrapper + auth/session helpers
   static/js/tailwind-config.js  design tokens extracted from the Stitch export
 docker-compose.yml  Postgres + backend for local dev
@@ -119,10 +178,14 @@ Then, in a second terminal, seed the reference data:
 docker compose exec backend python -m app.seed
 ```
 
-Open http://localhost:8000 — it redirects to the login page. A demo admin
-account is created by the seed script (`admin@omnisure.in` /
-`ChangeMe123!` — **change this password before any real deployment**), or
-sign up as a new customer from the UI.
+Open http://localhost:8000 — it redirects to the login page. Demo accounts
+are created by the seed script (**change these passwords before any real
+deployment**):
+
+- Admin: `admin@omnisure.in` / `ChangeMe123!`
+- Claims reviewer (employee): `reviewer@omnisure.in` / `ChangeMe123!`
+
+...or sign up as a new customer from the UI.
 
 API docs (Swagger) are at http://localhost:8000/docs.
 
@@ -152,15 +215,15 @@ uvicorn app.main:app --reload
   app should degrade to a clearly-labeled demo response instead of
   crashing, never pretend a real result.
 
-## Roadmap (phases 3–7)
+## Roadmap (phases 4–7)
 
-3. Full claims system: FNOL, dynamic per-insurance-type questions, document
-   upload + OCR, AI damage analysis, coverage verification, triage
 4. Voice assistant (STT/TTS), AI intent detection and action execution
-5. Fraud/risk engine, STP vs. human-review routing, assessment, settlement
-6. Admin analytics dashboards (claims by type/status, STP rate, fraud-risk
-   claims, premium revenue — all DB-driven)
-7. Policy renewal reminders + parametric insurance (configurable trigger →
+5. Admin analytics dashboards (claims by type/status, STP rate, fraud-risk
+   claims, premium revenue — currently raw KPI numbers exist, charts don't
+   yet)
+6. Policy renewal reminders + parametric insurance (configurable trigger →
    payout)
+7. Final QA pass across every workflow, plus anything phases 1–3 surface
+   as needing hardening once real datasets/documents are loaded at scale
 
-Each phase adds routes/tables without breaking what Phases 1–2 already ship.
+Each phase adds routes/tables without breaking what Phases 1–3 already ship.
