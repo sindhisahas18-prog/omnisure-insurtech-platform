@@ -49,7 +49,7 @@
     </div>
   </section>
 
-  <section class="flex flex-col gap-space-sm">
+  <section id="advisor" class="flex flex-col gap-space-sm">
     <h2 class="font-headline-sm text-headline-sm text-on-surface">AI Insurance Advisor</h2>
     <form id="advisor-form" class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col gap-space-sm">
       <select id="advisor-type" required class="px-3 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant"></select>
@@ -80,6 +80,7 @@
 </main>
 
 <script src="/static/js/api.js"></script>
+<script src="/static/js/voice-assistant.js"></script>
 <script>
   requireAuth();
   const user = getUser();
@@ -116,10 +117,35 @@
           <span class="font-body-sm text-body-sm">Premium: <strong>${formatINR(p.premium_inr)}</strong></span>
           ${p.sum_insured_inr ? `<span class="font-body-sm text-body-sm">Sum insured: <strong>${formatINR(p.sum_insured_inr)}</strong></span>` : ""}
         </div>
-        ${p.status === "active" ? `<a href="/claims.html?policy_id=${p.id}&type=${p.insurance_type.code}" class="inline-block mt-1 px-3 py-1.5 rounded-xl bg-secondary/10 text-secondary font-label-sm text-label-sm font-semibold">File a Claim</a>` : ""}
+        <div class="flex items-center gap-2 mt-1">
+          ${p.status === "active" ? `<a href="/claims.html?policy_id=${p.id}&type=${p.insurance_type.code}" class="px-3 py-1.5 rounded-xl bg-secondary/10 text-secondary font-label-sm text-label-sm font-semibold">File a Claim</a>` : ""}
+          <button data-policy-id="${p.id}" class="explain-policy-btn px-3 py-1.5 rounded-xl bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold">Explain this policy</button>
+        </div>
+        <div data-explain-for="${p.id}" class="hidden font-body-sm text-body-sm text-on-surface-variant whitespace-pre-line border-t border-outline-variant pt-2 mt-1"></div>
       </div>`
       )
       .join("");
+
+    document.querySelectorAll(".explain-policy-btn").forEach((btn) =>
+      btn.addEventListener("click", () => explainPolicy(btn.dataset.policyId))
+    );
+
+    const explainParam = new URLSearchParams(window.location.search).get("explain");
+    if (explainParam) explainPolicy(explainParam);
+  }
+
+  async function explainPolicy(policyId) {
+    const target = document.querySelector(`[data-explain-for="${policyId}"]`);
+    if (!target) return;
+    target.classList.remove("hidden");
+    target.textContent = "Thinking...";
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    try {
+      const result = await apiFetch(`/policies/${policyId}/explain`);
+      target.textContent = result.answer + (result.demo_mode ? "\n\n(Demo mode — no LLM key configured.)" : "");
+    } catch (err) {
+      target.textContent = err.message;
+    }
   }
 
   async function loadInsuranceTypes() {
@@ -203,6 +229,8 @@
   Promise.all([loadSummary(), loadInsuranceTypes(), loadServicePlans(), populateAdvisorTypes()]).catch((err) => {
     console.error(err);
   });
+
+  initVoiceAssistant();
 </script>
 </body>
 </html>

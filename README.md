@@ -6,7 +6,7 @@ Business, Life, and Livestock insurance — built around a reusable insurance
 engine, a structured PostgreSQL database, and (from Phase 2) a RAG knowledge
 base over uploaded policy datasets.
 
-## Status: Phase 1 ✅ Foundation · Phase 2 ✅ RAG + AI Advisor · Phase 3 ✅ Claims System
+## Status: Phase 1 ✅ Foundation · Phase 2 ✅ RAG + AI Advisor · Phase 3 ✅ Claims System · Phase 4 ✅ Voice + AI Automation
 
 This is the first of 7 planned phases. What's live right now:
 
@@ -215,15 +215,54 @@ uvicorn app.main:app --reload
   app should degrade to a clearly-labeled demo response instead of
   crashing, never pretend a real result.
 
-## Roadmap (phases 4–7)
+### Phase 4, completed: voice assistant + AI intent detection/action execution
 
-4. Voice assistant (STT/TTS), AI intent detection and action execution
+- **Real STT/TTS, not a fabricated "AI voice"**: the widget (bottom-right on
+  `/dashboard.html` and `/claims.html`) uses the browser's native
+  `SpeechRecognition` for speech-to-text and `SpeechSynthesis` for
+  text-to-speech — zero external API calls, works with no setup. Browsers
+  without `SpeechRecognition` support (e.g. desktop Firefox) get a text
+  input instead of a broken mic button, never a silently non-functional one
+- **AI intent detection**: `intent_detection.py` classifies free text into
+  `file_claim` / `track_claims` / `get_recommendation` / `explain_policy` /
+  `general_help`, plus which of the 12 insurance types it's about. The
+  `DEMO_MODE` fallback is a genuine bilingual keyword classifier (English +
+  common Hinglish), not an English-only toy — it correctly parses the
+  product spec's own example verbatim: *"Merki car ka accident ho gaya hai
+  aur mujhe claim file karna hai"* → `file_claim` / `car`. A real
+  `gpt-4o-mini` call replaces it when `OPENAI_API_KEY` is set, for far
+  broader phrasing/language coverage
+- **AI action execution, grounded in the customer's real data**: intent
+  resolution (`assistant.py`) never assumes a policy exists — it looks up
+  the customer's actual active policies for the detected type. Exactly one
+  match → jumps straight into the claim wizard or policy explanation;
+  multiple matches → asks the customer to pick one; zero matches → says so
+  and offers the AI advisor instead. The frontend executes the resolved
+  action (navigate to the claim wizard, open the advisor, view claims) and
+  speaks the response back
+- **AI policy explanation**: `GET /api/v1/policies/{id}/explain` (an
+  "Explain this policy" button on every dashboard policy card) reuses the
+  advisor's document-retrieval layer, grounded in the policy's own stored
+  fields plus that insurance type's indexed policy documents — an honest
+  "no document indexed yet" message when there's nothing to retrieve from,
+  never invented coverage details
+
+**Verified end-to-end**, including two real bugs caught and fixed during
+testing (not just happy-path checks): a keyword tie-breaking bug that
+misclassified "what's the status of my claim?" as `file_claim` instead of
+`track_claims` (fixed by reordering intent priority so specific intents
+beat the generic one), and a silent-fallback bug where an unrecognized
+insurance-type code caused the policy filter to be skipped entirely,
+matching *any* policy instead of none (fixed to return no matches instead).
+
+## Roadmap (phases 5–7)
+
 5. Admin analytics dashboards (claims by type/status, STP rate, fraud-risk
    claims, premium revenue — currently raw KPI numbers exist, charts don't
    yet)
 6. Policy renewal reminders + parametric insurance (configurable trigger →
    payout)
-7. Final QA pass across every workflow, plus anything phases 1–3 surface
+7. Final QA pass across every workflow, plus anything phases 1–4 surface
    as needing hardening once real datasets/documents are loaded at scale
 
-Each phase adds routes/tables without breaking what Phases 1–3 already ship.
+Each phase adds routes/tables without breaking what Phases 1–4 already ship.

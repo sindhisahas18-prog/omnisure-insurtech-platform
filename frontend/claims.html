@@ -79,6 +79,7 @@
 </main>
 
 <script src="/static/js/api.js"></script>
+<script src="/static/js/voice-assistant.js"></script>
 <script>
   requireAuth();
   document.getElementById("logout-btn").addEventListener("click", () => {
@@ -302,6 +303,8 @@
   } else {
     renderList();
   }
+
+  initVoiceAssistant();
 </script>
 </body>
 </html>
