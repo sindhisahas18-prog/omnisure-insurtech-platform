@@ -6,7 +6,7 @@ Business, Life, and Livestock insurance — built around a reusable insurance
 engine, a structured PostgreSQL database, and (from Phase 2) a RAG knowledge
 base over uploaded policy datasets.
 
-## Status: Phase 1 ✅ Foundation · Phase 2 ✅ RAG + AI Advisor · Phase 3 ✅ Claims System · Phase 4 ✅ Voice + AI Automation
+## Status: Phase 1 ✅ Foundation · Phase 2 ✅ RAG + AI Advisor · Phase 3 ✅ Claims System · Phase 4 ✅ Voice + AI Automation · Phase 5 ✅ Admin Analytics
 
 This is the first of 7 planned phases. What's live right now:
 
@@ -255,14 +255,36 @@ beat the generic one), and a silent-fallback bug where an unrecognized
 insurance-type code caused the policy filter to be skipped entirely,
 matching *any* policy instead of none (fixed to return no matches instead).
 
-## Roadmap (phases 5–7)
+### Phase 5, completed: admin analytics
 
-5. Admin analytics dashboards (claims by type/status, STP rate, fraud-risk
-   claims, premium revenue — currently raw KPI numbers exist, charts don't
-   yet)
+- **KPIs** (`GET /api/v1/admin/kpis`, extended): total customers/employees,
+  active policies, total/settled/pending claims, **STP rate** and **manual
+  review rate** (computed from the `triage_decision` event log — the actual
+  routing decision, not inferred from current status, so a human-reviewed
+  claim that later gets approved still correctly counts against the manual
+  review rate), **average claim amount**, and **fraud-risk claim count**
+  (score ≥ 50)
+- **Charts** (`GET /api/v1/admin/analytics/charts`, new — real Chart.js bar/
+  line/doughnut charts on `/admin.html`, not static images): claims by
+  insurance type, claims by status, settlement amount by month, STP vs.
+  manual review, fraud/risk score distribution, monthly claim volume,
+  premium revenue by insurance type
+- Every number is a live aggregation over `Claim`, `ClaimEvent`, `Policy`,
+  and `User` rows — nothing hardcoded, nothing estimated. An admin with no
+  claims yet sees an honest "no data yet" message instead of empty or fake
+  charts
+
+**Verified end-to-end** with three real claims run through the actual
+workflow (one clean STP settlement, one high-value claim correctly routed
+to human review and approved at a reduced amount, one rejected) — every
+KPI and chart series was checked against hand-computed expected values
+and matched exactly.
+
+## Roadmap (phases 6–7)
+
 6. Policy renewal reminders + parametric insurance (configurable trigger →
    payout)
-7. Final QA pass across every workflow, plus anything phases 1–4 surface
+7. Final QA pass across every workflow, plus anything phases 1–5 surface
    as needing hardening once real datasets/documents are loaded at scale
 
-Each phase adds routes/tables without breaking what Phases 1–4 already ship.
+Each phase adds routes/tables without breaking what Phases 1–5 already ship.

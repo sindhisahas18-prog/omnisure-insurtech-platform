@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="/static/js/tailwind-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </head>
 <body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen">
 <header class="sticky top-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_12px_rgba(11,28,48,0.03)]">
@@ -24,9 +25,19 @@
   </div>
 </header>
 
-<main class="flex-1 w-full px-margin py-space-md max-w-3xl mx-auto">
-  <h1 class="font-headline-xl-mobile text-headline-xl-mobile mb-space-md">Platform overview</h1>
-  <div id="kpi-grid" class="grid grid-cols-2 gap-space-sm"></div>
+<main class="flex-1 w-full px-margin py-space-md max-w-4xl mx-auto flex flex-col gap-space-lg">
+  <div>
+    <h1 class="font-headline-xl-mobile text-headline-xl-mobile mb-space-md">Platform overview</h1>
+    <div id="kpi-grid" class="grid grid-cols-2 md:grid-cols-3 gap-space-sm"></div>
+  </div>
+
+  <div>
+    <h2 class="font-headline-sm text-headline-sm mb-space-sm">Analytics</h2>
+    <div id="charts-empty" class="hidden font-body-sm text-body-sm text-on-surface-variant">
+      No claims data yet — charts will populate as claims are filed.
+    </div>
+    <div id="charts-grid" class="grid grid-cols-1 md:grid-cols-2 gap-space-md"></div>
+  </div>
 </main>
 
 <script src="/static/js/api.js"></script>
@@ -49,7 +60,17 @@
     total_claims: "Total Claims",
     settled_claims: "Settled Claims",
     pending_claims: "Pending Claims",
+    stp_rate: "STP Rate",
+    manual_review_rate: "Manual Review Rate",
+    average_claim_amount_inr: "Avg. Claim Amount",
+    fraud_risk_claims: "Fraud-Risk Claims",
   };
+
+  function formatKpiValue(key, value) {
+    if (key === "stp_rate" || key === "manual_review_rate") return `${value}%`;
+    if (key === "average_claim_amount_inr") return formatINR(value);
+    return value;
+  }
 
   apiFetch("/admin/kpis").then((kpis) => {
     const grid = document.getElementById("kpi-grid");
@@ -58,10 +79,73 @@
         ([key, value]) => `
       <div class="p-space-md rounded-2xl bg-surface-container-lowest shadow-sm flex flex-col justify-between h-24">
         <span class="font-label-md text-label-md text-on-surface-variant">${LABELS[key] || key}</span>
-        <span class="font-headline-lg text-headline-lg text-on-surface">${value}</span>
+        <span class="font-headline-lg text-headline-lg text-on-surface">${formatKpiValue(key, value)}</span>
       </div>`
       )
       .join("");
+  });
+
+  const CHART_TITLES = {
+    claims_by_insurance_type: "Claims by Insurance Type",
+    claims_by_status: "Claims by Status",
+    settlement_amount_by_month: "Settlement Amount (₹) by Month",
+    stp_vs_manual: "STP vs Manual Review",
+    fraud_risk_distribution: "Fraud/Risk Distribution",
+    monthly_claims: "Monthly Claim Volume",
+    premium_revenue_by_type: "Premium Revenue (₹) by Type",
+  };
+  const CHART_KIND = {
+    claims_by_insurance_type: "bar",
+    claims_by_status: "doughnut",
+    settlement_amount_by_month: "line",
+    stp_vs_manual: "doughnut",
+    fraud_risk_distribution: "bar",
+    monthly_claims: "line",
+    premium_revenue_by_type: "bar",
+  };
+  const PALETTE = ["#4b41e1", "#645efb", "#acedff", "#c3c0ff", "#001f26", "#bec6e0", "#76777d"];
+
+  apiFetch("/admin/analytics/charts").then((charts) => {
+    const grid = document.getElementById("charts-grid");
+    const totalPoints = Object.values(charts).reduce((sum, series) => sum + series.length, 0);
+    if (totalPoints === 0) {
+      document.getElementById("charts-empty").classList.remove("hidden");
+      return;
+    }
+
+    Object.entries(charts).forEach(([key, series]) => {
+      if (series.length === 0) return;
+      const card = document.createElement("div");
+      card.className = "p-space-md rounded-2xl bg-surface-container-lowest shadow-sm";
+      card.innerHTML = `
+        <h3 class="font-label-lg text-label-lg mb-2">${CHART_TITLES[key] || key}</h3>
+        <canvas></canvas>`;
+      grid.appendChild(card);
+
+      const ctx = card.querySelector("canvas").getContext("2d");
+      const kind = CHART_KIND[key] || "bar";
+      new Chart(ctx, {
+        type: kind,
+        data: {
+          labels: series.map((s) => s.label),
+          datasets: [
+            {
+              data: series.map((s) => s.value),
+              backgroundColor: kind === "line" ? "#4b41e120" : PALETTE,
+              borderColor: "#4b41e1",
+              borderWidth: kind === "line" ? 2 : 1,
+              fill: kind === "line",
+              tension: 0.3,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: kind === "doughnut" } },
+          scales: kind === "doughnut" ? {} : { y: { beginAtZero: true } },
+        },
+      });
+    });
   });
 </script>
 </body>
